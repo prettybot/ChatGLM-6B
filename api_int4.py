@@ -29,24 +29,19 @@ async def create_item(request: Request):
     max_length = json_post_list.get('max_length')
     top_p = json_post_list.get('top_p')
     temperature = json_post_list.get('temperature')
-    response, history = model.chat(tokenizer,
-                                   prompt,
-                                   history=history,
-                                   max_length=max_length if max_length else 2048,
-                                   top_p=top_p if top_p else 0.7,
-                                   temperature=temperature if temperature else 0.95)
-    now = datetime.datetime.now()
-    time = now.strftime("%Y-%m-%d %H:%M:%S")
-    answer = {
-        "response": response,
-        "history": history,
-        "status": 200,
-        "time": time
-    }
-    log = "[" + time + "] " + '", prompt:"' + prompt + '", response:"' + repr(response) + '"'
-    print(log)
+
+    def results():
+        for res, history_new in model.stream_chat(tokenizer,
+                                                  prompt,
+                                                  history=history,
+                                                  max_length=max_length if max_length else 2048,
+                                                  top_p=top_p if top_p else 0.7,
+                                                  temperature=temperature if temperature else 0.95):
+            yield 'event: message\ndata: {}\n\n'.format(res)
+        yield 'event: message\ndata: [DONE]\n\n'
+
     torch_gc()
-    return answer
+    return StreamingResponse(results(), media_type="text/event-stream")
 
 
 if __name__ == '__main__':
