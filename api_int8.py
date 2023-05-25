@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from transformers import AutoTokenizer, AutoModel
 import uvicorn, json, datetime
 import torch
-from starlette.responses import StreamingResponse
+from sse_starlette.sse import EventSourceResponse
 
 DEVICE = "cuda"
 DEVICE_ID = "0"
@@ -32,17 +32,26 @@ async def create_item(request: Request):
     temperature = json_post_list.get('temperature')
 
     def results():
+        tmp = ''
         for res, history_new in model.stream_chat(tokenizer,
                                                   prompt,
                                                   history=history,
                                                   max_length=max_length if max_length else 2048,
                                                   top_p=top_p if top_p else 0.7,
                                                   temperature=temperature if temperature else 0.95):
-            yield 'event: message\ndata: {}\n\n'.format(res)
-        yield 'event: message\ndata: [DONE]\n\n'
+            process_text = res.replace(tmp, "")
+            tmp = res
+            yield {
+                "event": "message",
+                "data": process_text
+            }
+        yield {
+            "event": "message",
+            "data": "[DONE]"
+        }
 
     torch_gc()
-    return StreamingResponse(results(), media_type="text/event-stream")
+    return EventSourceResponse(results())
 
 
 if __name__ == '__main__':
